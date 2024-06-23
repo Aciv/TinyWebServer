@@ -1,6 +1,6 @@
 #include "buffer.h"
 
-cBuffer::cBuffer(int a_InitBuffSize = 1024) : m_Buffer(a_InitBuffSize),
+cBuffer::cBuffer(int a_InitBuffSize) : m_Buffer(a_InitBuffSize),
     m_ReadPos(0),  m_WritePos(0) {
     assert(m_Buffer.size() > 0);
 }
@@ -63,7 +63,7 @@ void cBuffer::EnsureWriteable(size_t a_len){
 }
 
 void cBuffer::MakeSpace(size_t a_len){
-    if(m_ReadPos + WritableBytes() >= a_len){
+    if(PrependableBytes() + WritableBytes() >= a_len){
         size_t LastReadable = ReadableBytes();
         std::copy(BeginPtr() + m_ReadPos, BeginPtr() + m_WritePos, BeginPtr());
         m_ReadPos = 0;
@@ -101,7 +101,6 @@ void cBuffer::Append(const cBuffer& a_buff){
 }
 
 ssize_t cBuffer::ReadFd(int a_fd, int* a_Errno){
-    assert(a_fd > 0);
     char buff[65535];
     struct iovec iov[2];
     const size_t Writable = WritableBytes();
@@ -114,10 +113,9 @@ ssize_t cBuffer::ReadFd(int a_fd, int* a_Errno){
     const ssize_t len = readv(a_fd, iov, 2);
     if(len < 0) {
         *a_Errno = errno;
-        return len;
     }
     else if(static_cast<size_t>(len) <= Writable) {
-        m_ReadPos += len;
+        m_WritePos += len;
     }
     else {
         m_WritePos = m_Buffer.size();
@@ -125,6 +123,8 @@ ssize_t cBuffer::ReadFd(int a_fd, int* a_Errno){
     }
     return len;
 }
+
+
 ssize_t cBuffer::WriteFd(int a_fd, int* a_Errno){
     assert(a_fd > 0);
     size_t readSize = ReadableBytes();

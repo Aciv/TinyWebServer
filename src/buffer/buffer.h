@@ -1,6 +1,6 @@
-
 #ifndef BUFFER_H
 #define BUFFER_H
+
 #include <cstring>  //perror
 #include <iostream>
 #include <unistd.h>  // write
