@@ -1,5 +1,5 @@
 #include "webServer.h"
-#include <iostream>
+
 
 bool cWebServer::InitSocket() {
     int ret;
@@ -55,12 +55,15 @@ bool cWebServer::InitSocket() {
     return true;
 }
 
-cWebServer::cWebServer(int a_Port, int a_TimeoutMs, int a_TrigMod, 
-                    int a_ThreadNum, bool a_openLog, int a_logLevel, int a_logQueSize)
+cWebServer::cWebServer(int a_Port, int a_TimeoutMs, int a_TrigMod, int a_ThreadNum, 
+                        int a_sqlPort, const char *a_sqlUser, const char * a_sqlPwd,
+                        const char * a_dbName, int a_connPoolNum,
+                        bool a_openLog, int a_logLevel, int a_logQueSize)
     : m_Port(a_Port), m_TimeoutMs(a_TimeoutMs), m_ThreadNum(a_ThreadNum),
       m_ListenEvent(EPOLLRDHUP | EPOLLET),
       m_ConnEvent(EPOLLONESHOT | EPOLLRDHUP | EPOLLET),
-      m_Epoller(new cEpoller()), m_ThreadPool(new cThreadPool(m_ThreadNum)) {
+      m_Epoller(new cEpoller()), m_ThreadPool(new cThreadPool(m_ThreadNum)),
+      m_timer(new cHeapTimer()) {
 
     m_SrcDir = getcwd(nullptr, 256);
     assert(m_SrcDir);
@@ -72,8 +75,10 @@ cWebServer::cWebServer(int a_Port, int a_TimeoutMs, int a_TrigMod,
     InitEventMode(a_TrigMod);
     if(!InitSocket()) m_IsClose = true;
 
+    cSqlConnPool::Instance()->Init("localhost", a_sqlPort, a_sqlUser, a_sqlPwd, a_dbName, a_connPoolNum);
+
     if(a_openLog) {
-        Log::Instance()->init(a_logLevel, "./log", ".log", a_logQueSize);
+        cLog::Instance()->init(a_logLevel, "./log", ".log", a_logQueSize);
         if(m_IsClose) { LOG_ERROR("========== Server init error!=========="); }
         else {
             LOG_INFO("========== Server init ==========");
@@ -117,10 +122,13 @@ void cWebServer::InitEventMode(int a_TrigMode) {
 }
 
 void cWebServer::Start(){
-    int TimeMs = 100;  
+    int TimeMs = -1;  
 
     if(!m_IsClose) { LOG_INFO("========== Server start ==========");  }
     while(!m_IsClose) {
+        if(m_TimeoutMs > 0){
+            TimeMs = m_timer->GetNextTick();
+        }
         int EventCnt = m_Epoller->Wait(TimeMs);
         for(int i = 0; i < EventCnt; i++) {
             int fd = m_Epoller->GetEventFd(i);
@@ -175,19 +183,29 @@ void cWebServer::DealListen(){
 void cWebServer::AddClient(int a_Fd, sockaddr_in a_Addr){
     assert(a_Fd > 0);
     m_Users[a_Fd].init(a_Fd, a_Addr);
-
+    if(m_TimeoutMs > 0) {
+        m_timer->add(a_Fd, m_TimeoutMs, std::bind(&cWebServer::CloseConn, this, &m_Users[a_Fd]));
+    }
     m_Epoller->AddFd(a_Fd, EPOLLIN | m_ConnEvent);
     SetFdNonblock(a_Fd);
     LOG_INFO("Client[%d] in!", m_Users[a_Fd].GetFd());
 }
 
+void cWebServer::ExtentTime(cHttpConn* a_Client){
+    assert(a_Client);
+    if(m_TimeoutMs > 0) { m_timer->adjust(a_Client->GetFd(), m_TimeoutMs); }
+}
+
+
 void cWebServer::DealRead(cHttpConn* a_Client){
     assert(a_Client);
+    ExtentTime(a_Client);
     m_ThreadPool->AddTask(std::bind(&cWebServer::OnRead, this, a_Client));
 }
 
 void cWebServer::DealWrite(cHttpConn* a_Client){
     assert(a_Client);
+    ExtentTime(a_Client);
     m_ThreadPool->AddTask(std::bind(&cWebServer::OnWrite, this, a_Client));
 }
 

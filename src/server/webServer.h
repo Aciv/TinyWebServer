@@ -15,6 +15,8 @@
 #include "../pool/threadPool.h"
 #include "../http/httpConn.h"
 #include "../log/log.h"
+#include "../pool/sqlconnRAII.h"
+#include "../timer/heaptimer.h"
 
 class cWebServer{
 private:
@@ -28,6 +30,7 @@ private:
     void DealWrite(cHttpConn* a_Client);
     void DealRead(cHttpConn* a_Client);
     void CloseConn(cHttpConn* a_Client);
+    void ExtentTime(cHttpConn* client);
 
     void OnRead(cHttpConn* a_Client);
     void OnWrite(cHttpConn* a_Client);
@@ -49,8 +52,11 @@ private:
     std::unique_ptr<cEpoller> m_Epoller;
     std::unordered_map<int, cHttpConn> m_Users;
     std::unique_ptr<cThreadPool> m_ThreadPool;
+    std::unique_ptr<cHeapTimer> m_timer;
 public:
     cWebServer(int a_Port, int a_TrigMod, int a_TimeoutMs, int a_ThreadNum, 
+            int a_sqlPort, const char *a_sqlUser, const char * a_sqlPwd,
+            const char * a_dbName, int a_connPoolNum,
             bool a_openLog, int a_logLevel, int a_logQueSize);
 
     ~cWebServer();

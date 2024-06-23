@@ -9,6 +9,7 @@
 
 #include "../buffer/buffer.h"
 #include "../log/log.h"
+#include "../pool/sqlconnRAII.h"
 #include "httpRequest.h"
 #include "httpResponse.h"
 
@@ -40,7 +41,7 @@ public:
     int GetPort() const;
     const char* GetIP() const;
     sockaddr_in GetAddr() const;
-    
+
     static bool m_IsET;
     static const char* m_SrcDir;
     static std::atomic<int> m_UserCount;

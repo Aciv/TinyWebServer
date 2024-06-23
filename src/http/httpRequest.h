@@ -10,6 +10,7 @@
 
 #include "../buffer/buffer.h"
 #include "../log/log.h"
+#include "../pool/sqlconnRAII.h"
 
 class cHttpRequest{
 public:
